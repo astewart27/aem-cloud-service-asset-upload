@@ -1,0 +1,39 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.3.10'
+	id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.slalom'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(17)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	developmentOnly 'org.springframework.boot:spring-boot-devtools'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+	// Apache Commons
+	implementation 'org.apache.commons:commons-lang3:3.17.0'
+
+	// Lombok annotations (compile‑only so it doesn’t ship in your runtime JAR)
+    compileOnly 'org.projectlombok:lombok:1.18.38' 
+
+    // Run Lombok’s annotation processor so getters/setters/etc get generated
+    annotationProcessor 'org.projectlombok:lombok:1.18.38'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
