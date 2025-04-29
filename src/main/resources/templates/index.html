@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Asset Upload</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <h1 class="title">AEM Cloud Service - Asset Upload</h1>
+
+    <div class="upload-container" id="drop-zone">
+        <label class="file-input">
+            <span>Choose files</span> to upload
+            <input type="file" id="file-upload" name="files" multiple>
+        </label>
+        <div class="file-name" id="filename">No files chosen</div>
+    </div>
+
+    <div class="files-container" id="files-container">
+        <div class="header-upload-container">
+            <h2>Files to Upload</h2>
+            <button id="upload-assets-btn" type="button">Upload Assets</button>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Size</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script type="application/javascript" src="/script.js"></script>
+</body>
+</html>
