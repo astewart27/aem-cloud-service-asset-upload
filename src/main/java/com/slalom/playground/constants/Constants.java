@@ -8,8 +8,6 @@ public class Constants {
 
     public static final String FAILED = "Failed";
 
-    public static final String ACCESS_TOKEN = "someAccessToken";
-
     public static final String INITIATE_UPLOAD_SELECTOR = ".initiateUpload.json";
 
     public static final String FILE_NAME = "fileName";

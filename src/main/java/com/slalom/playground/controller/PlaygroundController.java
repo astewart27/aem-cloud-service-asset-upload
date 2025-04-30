@@ -37,6 +37,7 @@ public class PlaygroundController {
         this.assetUploadService = assetUploadService;
     }
 
+    // Additionally can create a FE application to handle file upload request to /upload endpoint.
     @GetMapping("/")
     public String home() {
         return "index";
@@ -53,7 +54,6 @@ public class PlaygroundController {
         }
 
         String response = assetUploadService.uploadAssetsToCloud(folderPath, files);
-        LOGGER.info("Response :: {}", response);
 
         JsonArray responseArray = JsonParser.parseString(response).getAsJsonArray();
         for (JsonElement element : responseArray) {

@@ -55,7 +55,6 @@ public class AssetUploadServiceImpl implements AssetUploadService {
 
         // Step 1: Initiate Upload
         ResponseEntity<String> initiateUploadResponse = initiateUploadRequest(authorUrl, folderPath, files);
-        LOGGER.info("In uploadAssetsToCloud :: initiateUploadResponse body {}", initiateUploadResponse.getBody());
 
         // Step 2: Upload Asset Binaries
         List<AssetBinaryUploadResponse> filtered = new ArrayList<>();
@@ -70,13 +69,10 @@ public class AssetUploadServiceImpl implements AssetUploadService {
             }
         }
 
-        LOGGER.info("In uploadAssetsToCloud :: filtered 200 responses {}", filtered);
-
-        String completedUpload = null;
         // Step 3: Complete Upload
+        String completedUpload = null;
         if (!filtered.isEmpty()) {
             List<AssetCompleteUploadResponse> completeUploadResponse = completeUploadRequest(authorUrl, filtered, initiateUploadResponse);
-            LOGGER.info("In uploadAssetsToCloud :: completeUploadResponse {}", completeUploadResponse);
             try {
                 ObjectMapper mapper = new ObjectMapper();
                 completedUpload = mapper.writeValueAsString(completeUploadResponse);
@@ -95,7 +91,7 @@ public class AssetUploadServiceImpl implements AssetUploadService {
         String initiateUploadUrl = authorUrl.concat(folderPath).concat(Constants.INITIATE_UPLOAD_SELECTOR);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-        headers.setBearerAuth(Constants.ACCESS_TOKEN);
+        headers.setBearerAuth("someAccessToken");
 
         MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
         for (MultipartFile file: files) {
@@ -113,7 +109,6 @@ public class AssetUploadServiceImpl implements AssetUploadService {
         if (!formData.isEmpty()) {
             try {
                 HttpEntity<MultiValueMap<String, String>> request = new HttpEntity<>(formData, headers);
-                LOGGER.info("In initiateUploadRequest :: sending request...");
                 return this.restTemplate.exchange(initiateUploadUrl, HttpMethod.POST, request, String.class);
             } catch (HttpClientErrorException httpRestClientException) {
                 LOGGER.info("Error in initiateUploadRequest request {}", httpRestClientException.getMessage());
@@ -133,9 +128,8 @@ public class AssetUploadServiceImpl implements AssetUploadService {
             for (JsonElement initFile: initUploadResFiles) {
                 JsonObject currentFile = initFile.getAsJsonObject();
                 if (StringUtils.equals(file.getOriginalFilename(), currentFile.get(Constants.FILE_NAME).getAsString())) {
-                    // If file size < maxPartSize - upload all bytes to first uploadURI - ignore the rest uploadURIs
+                    // If file size < maxPartSize - upload all bytes to first uploadURI - ignore the rest of uploadURIs
                     if (file.getSize() < currentFile.get(Constants.MAX_PART_SIZE).getAsInt()) {
-                        LOGGER.info("In uploadBinaryRequest :: asset is < maxPartSize - upload in single request");
                         byte[] fileBytes = IOUtils.toByteArray(file.getInputStream());
                         HttpHeaders headers = new HttpHeaders();
                         headers.setContentType(MediaType.parseMediaType(currentFile.get(Constants.MIME_TYPE).getAsString()));
@@ -145,33 +139,33 @@ public class AssetUploadServiceImpl implements AssetUploadService {
                         URI uri = URI.create(currentFile.getAsJsonArray(Constants.UPLOAD_URIS).get(0).getAsString());
                         this.restTemplate.getInterceptors().clear();
                         try {
-                            LOGGER.info("In uploadBinaryRequest :: sending request...");
                             ResponseEntity<String> responseEntity = this.restTemplate.exchange(uri, HttpMethod.PUT, request, String.class);
                             boolean uploadSuccessful =  responseEntity.getStatusCode().is2xxSuccessful();
-                            LOGGER.info("In uploadBinaryRequest :: uploadSuccessful {}", uploadSuccessful);
                             responses.add(new AssetBinaryUploadResponse(file.getOriginalFilename(), responseEntity.getStatusCode(), uploadSuccessful ? Constants.SUCCESSFUL : Constants.FAILED, 1));
                         } catch (HttpClientErrorException httpRestClientException) {
                             LOGGER.info("Error uploading asset binaries {}", httpRestClientException.getMessage());
                         }
                     } else {
                         // Large asset: file size > maxPartSize - Upload in chunks
-                        LOGGER.info("In uploadBinaryRequest :: asset is > maxPartSize - upload in chunks");
                         long fileSize = file.getBytes().length;
                         int minPartSize = currentFile.get(Constants.MIN_PART_SIZE).getAsInt();
                         int maxPartSize = currentFile.get(Constants.MAX_PART_SIZE).getAsInt();
                         int totalParts = calculatePartCount(fileSize, maxPartSize);
-                        LOGGER.info("In uploadBinaryRequest :: calculatePartCount {}", totalParts);
                         String mimeType = currentFile.get(Constants.MIME_TYPE).getAsString();
                         String fileName = currentFile.get(Constants.FILE_NAME).getAsString();
                         JsonArray uploadURIs = currentFile.getAsJsonArray(Constants.UPLOAD_URIS);
                         long[] partSizes = calculatePartSizes(fileSize, totalParts, minPartSize, maxPartSize);
-                        LOGGER.info("In uploadBinaryRequest :: calculatePartSizes {}", partSizes);
                         try (InputStream inputStream = file.getInputStream()) {
+                            List<ResponseEntity<String>> entities = new ArrayList<>();
                             for (int partIndex = 0; partIndex < partSizes.length; partIndex++) {
                                 long partSize = partSizes[partIndex];
                                 byte[] chunkData = inputStream.readNBytes((int) partSize);
                                 String uploadUrl = uploadURIs.get(partIndex).getAsString();
-                                responses.add(uploadChunk(fileName, uploadUrl, chunkData, mimeType, partIndex));
+                                entities.add(uploadChunk(uploadUrl, chunkData, mimeType));
+                            }
+                            if (entities.stream().allMatch(x -> x.getStatusCode().is2xxSuccessful())) {
+                                AssetBinaryUploadResponse assetBinaryUploadResponse = new AssetBinaryUploadResponse(fileName, entities.get(0).getStatusCode(), entities.get(0).getStatusCode().is2xxSuccessful() ? Constants.SUCCESSFUL : Constants.FAILED, 1);
+                                responses.add(assetBinaryUploadResponse);
                             }
                         }
                     }
@@ -193,7 +187,7 @@ public class AssetUploadServiceImpl implements AssetUploadService {
                 String completeUrl = authorUrl.concat(initiateUploadResponseObj.get(Constants.COMPLETE_URI).getAsString());
                 HttpHeaders headers = new HttpHeaders();
                 headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
-                headers.setBearerAuth(Constants.ACCESS_TOKEN);
+                headers.setBearerAuth("someAccessToken");
 
                 JsonArray filesArray = initiateUploadResponseObj.getAsJsonArray(Constants.FILES);
                 for (AssetBinaryUploadResponse assetBinaryUploadResponse : filtered) {
@@ -214,18 +208,16 @@ public class AssetUploadServiceImpl implements AssetUploadService {
                         }
                     }
                 }
-                return responses;
             } catch (HttpClientErrorException httpRestClientException) {
                 LOGGER.info("Error during complete upload {}", httpRestClientException.getMessage());
             }
         }
         LOGGER.info("Exiting completeUploadRequest");
-        return null;
+        return responses;
     }
 
     // Helper method to upload large assets in chunks
-    private AssetBinaryUploadResponse uploadChunk(String fileName, String uploadUrl, byte[] chunkData, String mimeType, int partIndex) {
-        //List<AssetBinaryUploadResponse> responses = new ArrayList<>();
+    private ResponseEntity<String> uploadChunk(String uploadUrl, byte[] chunkData, String mimeType) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.parseMediaType(mimeType));
         headers.setContentLength(chunkData.length);
@@ -234,11 +226,9 @@ public class AssetUploadServiceImpl implements AssetUploadService {
         URI uri = URI.create(uploadUrl);
         this.restTemplate.getInterceptors().clear();
         try {
-            ResponseEntity<String> responseEntity = this.restTemplate.exchange(uri, HttpMethod.PUT, request, String.class);
-            return new AssetBinaryUploadResponse(fileName, responseEntity.getStatusCode(), responseEntity.getStatusCode().is2xxSuccessful() ? Constants.SUCCESSFUL : Constants.FAILED, partIndex);
-            //responses.add(new AssetBinaryUploadResponse(fileName, responseEntity.getStatusCode(), responseEntity.getStatusCode().is2xxSuccessful() ? "success" : "fail"));
+            return this.restTemplate.exchange(uri, HttpMethod.PUT, request, String.class);
         } catch (HttpClientErrorException httpRestClientException) {
-            //throw handleException(httpRestClientException);
+            LOGGER.info("Error during upload asset binary chunk {}", httpRestClientException.getMessage());
         }
         return null;
     }
@@ -291,16 +281,14 @@ public class AssetUploadServiceImpl implements AssetUploadService {
             if (responseEntity.getStatusCode().is2xxSuccessful()) {
                 return true;
             } else {
-                String folder = folderPath.substring(folderPath.lastIndexOf("/") + 1);
+                String folder = folderPath.substring(folderPath.lastIndexOf(Constants.SLASH) + 1);
                 MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
-                LOGGER.info("In checkIfFolderPathExists :: folder");
                 headers.setContentType(MediaType.MULTIPART_FORM_DATA);
                 formData.add(Constants.NAME, folder);
                 formData.add(Constants.TITLE, folder);
                 HttpEntity<MultiValueMap<String, String>> createFolderRequest = new HttpEntity<>(formData, headers);
                 ResponseEntity<String> createFolderEntity = this.restTemplate.exchange(folderUrl, HttpMethod.POST, createFolderRequest, String.class);
-                LOGGER.info("In checkIfFolderPathExists :: createFolderEntity {}", createFolderEntity.getStatusCode());
-                return responseEntity.getStatusCode().is2xxSuccessful();
+                return createFolderEntity.getStatusCode().is2xxSuccessful();
             }
 
         } catch (HttpClientErrorException httpRestClientException) {
